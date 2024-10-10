@@ -1,0 +1,38 @@
+#install.packages("pacman") #en dado caso de no tener instalados los paquetes
+#Creador: Maria Jose Perez
+#Ejercicio: Análisis de miRNAs
+library(pacman)
+p_load("dplyr",
+       "ggplot2",
+       "readr")
+base_datos <- read.csv(file="https://raw.githubusercontent.com/ManuelLaraMVZ/Transcript-mica/main/Datos%20completos%20miRNAs%20ejercicio.csv")
+#View(base_datos)
+head(base_datos)
+Controles <-base_datos %>% 
+  filter(Type=="Selected Control") %>% 
+  select(-Type)
+Controles
+Promedio_Controles <- Controles %>% 
+  mutate(Prom_Tx=(T1+T2+T3)/3,
+         Prom_Cx=(C1+C2+C3)/3) %>% 
+  select(-2, -3, -4, -5, -6, -7) %>% 
+  filter(miRNA=="U6 snRNA")
+Promedio_Controles
+Gen_interes <- base_datos %>% 
+  filter(Type=="Target") %>% 
+  select(-Type)
+Gen_interes
+Promedio_Gen_Interes <- Gen_interes %>% 
+  mutate(Prom_Tx=(T1+T2+T3)/3,
+         Prom_Cx=(C1+C2+C3)/3) %>% 
+  select(1, 8, 9)
+Promedio_Gen_Interes
+head(Promedio_Gen_Interes)
+Analisis <- Promedio_Gen_Interes %>% 
+  mutate(DCT_Cx=Promedio_Gen_Interes$Prom_Cx-Promedio_Controles$Prom_Cx, 
+         DCT_Tx=Promedio_Gen_Interes$Prom_Tx-Promedio_Controles$Prom_Tx) %>% 
+  mutate(DosDCT_Cx = 2^(-DCT_Cx),
+       DosDCT_Tx = 2^(-DCT_Tx)) %>% 
+  mutate(DosDDCT = DosDCT_Tx/DosDCT_Cx)
+
+Analisis
