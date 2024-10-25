@@ -1,0 +1,82 @@
+library(pacman)
+p_load("dplyr",
+       "ggplot2",
+       "ggrepel",
+       "readr")
+base_datos <- read.csv(file="https://raw.githubusercontent.com/ManuelLaraMVZ/Transcript-mica/main/Datos%20completos%20miRNAs%20ejercicio.csv")
+#View(base_datos)
+head(base_datos)
+Controles <-base_datos %>% 
+  filter(Type=="Selected Control") %>% 
+  select(-Type)
+Controles
+Promedio_Controles <- Controles %>% 
+  mutate(Prom_Tx=(T1+T2+T3)/3,
+         Prom_Cx=(C1+C2+C3)/3) %>% 
+  select(-2, -3, -4, -5, -6, -7) %>% 
+  filter(miRNA=="U6 snRNA")
+Promedio_Controles
+Gen_interes <- base_datos %>% 
+  filter(Type=="Target") %>% 
+  select(-Type)
+Gen_interes
+Promedio_Gen_Interes <- Gen_interes %>% 
+  mutate(Prom_Tx=(T1+T2+T3)/3,
+         Prom_Cx=(C1+C2+C3)/3) %>% 
+  select(1, 8, 9)
+Promedio_Gen_Interes
+head(Promedio_Gen_Interes)
+Analisis <- Promedio_Gen_Interes %>% 
+  mutate(DCT_Cx=Promedio_Gen_Interes$Prom_Cx-Promedio_Controles$Prom_Cx, 
+         DCT_Tx=Promedio_Gen_Interes$Prom_Tx-Promedio_Controles$Prom_Tx) %>% 
+  mutate(DosDCT_Cx = 2^(-DCT_Cx),
+         DosDCT_Tx = 2^(-DCT_Tx)) %>% 
+  mutate(DosDDCT = DosDCT_Tx/DosDCT_Cx)
+
+Analisis
+
+Grafica <- ggplot(Promedio_Gen_Interes,
+                  aes(x=Prom_Cx,
+                      y=Prom_Tx))+
+  geom_point(size=2,
+             color="blue")
+Grafica
+Grafica_2 <- Grafica+
+  labs(title = "Condición control vs tratamiento",
+       caption = "Creador: María José Pérez",
+       x = expression("Control 2"^"-DCT"),
+       y = expression("Tratamiento 2"^"-DCT"))+
+  geom_smooth(method = "lm", color = "yellow")+
+  theme_minimal(base_family = "Times New Roman") +  
+  theme(panel.grid = element_blank(),  
+        panel.background = element_rect(fill = "white"),  
+        axis.line = element_line(colour = "black", size = 1, 
+                                 linetype = "solid"),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 14, face = "bold"),  
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+        
+Grafica_2
+
+head(Analisis)
+top_10 <- Analisis %>%
+  select(1, 4, 5) %>% 
+  top_n(10, DCT_Cx) %>% 
+  arrange(desc(DCT_Cx))
+
+head(top_10)
+
+Grafica_3 <- Grafica_2 +
+  geom_label_repel(data= top_10,
+                   mapping = aes(x= DCT_Cx,
+                                 y= DCT_Tx),label = miRNA),
+                   label.padding = unit(0.2, "lines"))
+Grafica_3 <- Grafica_2 +
+  geom_label_repel(data = top_10,
+                   mapping = aes(x = DCT_Cx, 
+                                 y = DCT_Tx, 
+                                 label = miRNA),  # Usa 'label = miRNA' solo si miRNA es una columna en 'top_10'
+                   label.padding = unit(0.2, "lines"),
+                   max.overlaps = Inf)
+Grafica_3   
+ggsave("Dispersión.jpeg", plot=Grafica_3, height = 5, width = 7, dpi = 300)
