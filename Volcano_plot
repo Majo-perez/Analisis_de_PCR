@@ -1,46 +1,136 @@
-#EJERCICIO GRÁFICA DE VOLCANO
-library ("pacman")
+library("pacman")
 p_load("vroom",
        "ggplot2",
        "ggrepel",
        "dplyr",
        "matrixTests")
-Volcano_data <- read.csv(file="https://raw.githubusercontent.com/ManuelLaraMVZ/Transcript-mica/main/Datos%20completos%20miRNAs%20ejercicio.csv")
+
+Volcano_data <- vroom(file="https://raw.githubusercontent.com/ManuelLaraMVZ/Transcript-mica/main/Datos%20completos%20miRNAs%20ejercicio.csv")
 head(Volcano_data)
-Controles <- Volcano_data %>% 
+
+controles <- Volcano_data %>% 
   filter(Type=="Selected Control") %>% 
-  select(-Type)
-head(Controles)
+  select(-2)
+head(controles)
+
 Volcano_data2 <- Volcano_data %>% 
   filter(Type=="Target") %>% 
-  select(-Type)
+  select(-2)
 head(Volcano_data2)
 
-#################################################################
-#Obtención de promedios
-PromedioT1 <- mean(Controles$T1)
-PromedioT2 <- mean(Controles$T2)
-PromedioT3 <- mean(Controles$T3)
-PromedioC1 <- mean(Controles$C1)
-PromedioC2 <- mean(Controles$C2)
-PromedioC3 <- mean(Controles$C3)
+###############################################
+
+#obtención de promedios
+promedioT1 <- mean(controles$T1)
+promedioT2 <- mean(controles$T2)
+promedioT3 <- mean(controles$T3)
+promedioC1 <- mean(controles$C1)
+promedioC2 <- mean(controles$C2)
+promedioC3 <- mean(controles$C3)
 
 Volcano_data3 <- Volcano_data2 %>% 
-  mutate(DCT1=T1-PromedioT1, 
-         DCT2=T2-PromedioT2,
-         DCT3=T3-PromedioT3,
-         DCC1=C1-PromedioC1,
-         DCC2=C2-PromedioC2,
-         DCC3=C3-PromedioC3) %>% 
-  select(-T1, -T2, -T3, -C1, -C2, -C3) %>% 
-  mutate(PromedioDCT=(DCT1+DCT2+DCT3)/3,
-         PromedioDCC=(DCC1+DCC2+DCC3)/3) %>% 
-  select(-2, -3, -4, -5, -6, -7) %>% 
-  mutate(DosDCT= 2^-PromedioDCT,
-         DosDCC = 2^-PromedioDCC,
-         DosDDCT = DosDCT/DosDCC,
-         FC=DosDDCT) %>% 
+  mutate(DCT1=T1-promedioT1,
+         DCT2=T2-promedioT2,
+         DCT3=T3-promedioT3,
+         DCC1=C1-promedioC1,
+         DCC2=C2-promedioC2,
+         DCC3=C3-promedioC3) %>% 
+  select(-2,-3,-4,-5,-6,-7) %>% 
+  mutate(promedioDCT=(DCT1+DCT2+DCT3)/3,
+         promedioDCC=(DCC1+DCC2+DCC3)/3) %>% 
+  select(-2,-3,-4,-5,-6,-7) %>% 
+  mutate(dosDCT=2^-promedioDCT,
+         dosDCC=2^-promedioDCC,
+         dosDDCT=dosDCT/dosDCC,
+         FC=dosDDCT) %>% 
   mutate(LogFC=log2(FC)) %>% 
-  select(1, 4, 5, 7, 8)
+  select(1,4,5,7,8) 
+
 head(Volcano_data3)
-Tvalue <- row_t_welch(DosDCT)
+
+Volcano_data4 <-  Volcano_data2 %>% 
+  mutate(DCT1=T1-promedioT1,
+         DCT2=T2-promedioT2,
+         DCT3=T3-promedioT3,
+         DCC1=C1-promedioC1,
+         DCC2=C2-promedioC2,
+         DCC3=C3-promedioC3) %>% 
+  select(-2,-3,-4,-5,-6,-7)
+
+head(Volcano_data4)
+
+Tvalue <- row_t_welch(Volcano_data4[,c("DCC1", "DCC2", "DCC3")],
+                      Volcano_data4[,c("DCT1", "DCT2", "DCT3")])
+head(Tvalue)
+
+Valor_p <- Tvalue %>% 
+  select(pvalue)
+
+head(Valor_p)
+
+FC_y_PV <- Volcano_data3 %>% 
+  select(1,4) %>% 
+  mutate(PV = Valor_p$pvalue,
+         LFC = log2(FC),
+         LPV = -log10(PV))
+
+head(FC_y_PV)
+#################################
+
+#selección de genes sobreexpresados y silenciados
+
+p_value=-log10(0.05)
+FC_threshold = log2(2)
+
+down_regulated <- FC_y_PV %>% 
+  filter(LFC < -FC_threshold,
+         LPV > p_value)
+
+down_regulated
+
+up_regulated <- FC_y_PV %>% 
+  filter(LFC > FC_threshold,
+         LPV > p_value)
+
+up_regulated
+
+top_down <- down_regulated %>% 
+  arrange(PV) %>% 
+  head(5)
+
+top_down
+
+top_up <- up_regulated %>% 
+  arrange(PV) %>% 
+  head(5)
+
+top_up
+
+######################################
+#Grafica
+# Gráfica de volcán
+Volcano <- ggplot(data = FC_y_PV, mapping = aes(x = LFC, y = LPV)) +
+  geom_point(alpha = 0.8, color = "gray") +
+  theme_minimal() +
+  xlab("Log2 (FC)") +
+  ylab("-Log10 (p_value)") +
+  geom_hline(yintercept = p_value, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = FC_threshold, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = -FC_threshold, linetype = "dashed", color = "blue") +
+  
+  # Puntos para genes up-regulated
+  geom_point(data = up_regulated, aes(x = LFC, y = LPV), alpha = 1, size = 3, color = "#E64B35B2") +
+  
+  # Puntos para genes down-regulated
+  geom_point(data = down_regulated, aes(x = LFC, y = LPV), alpha = 1, size = 3, color = "#3C5488B2") +
+  
+  # Etiquetas para los genes más destacados
+  geom_label_repel(data = top_down, aes(x = LFC, y = LPV, label = miRNA), max.overlaps = 50)+
+  geom_label_repel(data = top_up, aes(x = LFC, y = LPV, label = miRNA), max.overlaps = 50)
+
+Volcano
+#La gráfica sirve para analizar los genes más relevantes, los silenciados o sobreexpresados
+#Puntos rojos están sobreexpresados
+#Puntos azules están silenciados
+#Los puntos negros no es significativamente diferente 
+#Lo que está entre las líneas azules casi no cambió
